@@ -1,0 +1,97 @@
+*
+ * File:   boppit_timer.c
+ * Author: Thang Vo Hoang
+ * 
+ * This plays the boppit game. We are using the supplied schematic (boppit)
+ * There is one input button (port D pin 2, which goes LOW when pressed)
+ * There are 9 LEDs port D pins 3-7, port C pins 0,2-4
+ */
+
+
+#include <xc.h>
+/*
+void delay_ms(long num) {
+    while (num--) {
+        for (volatile long x = 0; x < 468; x++) {
+            ;
+        }
+    }
+}
+*/
+
+// Ftimer = CPU Frequency/Prescalar
+// Ftimer = 16MHz/1024 = 15.625KHz 
+// Ttick = 1/ 15.625K = 64 microseconds
+// Ttotal = 64 us X 65536 = 4.19 seconds
+// 1000 ms / 64us = 1000000us/64us = 15625 (0x061d)
+// 50 ms / 64 us = 50000us/64us = 781 (0x030d)
+void timer_delay_ms(int num) {
+  TCCR1B = (1<<CS10) | (1<<CS12); //set the pre-scalar as 1024
+  OCR1A = num; 	   //  delay
+  TCNT1 = 0;
+  {
+  //If flag is set exit	
+  while((TIFR1 & (1<<OCF1A)) == 0);// wait till the timer overflow flag is SET
+  TCNT1 = 0; 
+  TIFR1 |= (1<<OCF1A) ; //clear timer1 overflow flag 
+  }
+}
+
+void setup() {
+  DDRD = 0b11111000;  // pins 0-2 input, pins 3-7 output
+  DDRB = 0b00111111;  // pins 0-5 outputs (Pin 5 inbuilt LED for debug)
+    
+  PORTD = 0b00000111; // turn on pullup resistors for all inputs
+  PORTB = 0b11000000;
+  
+  // using timer1
+  TCCR1B = (1<<CS10) | (1<<CS12); //set the pre-scalar as 1024
+}
+
+void write_LEDs(int leds) {
+    PORTD = (leds & 0xf8) | 4;  // keep pullup resistor on
+    PORTB = (leds >> 8) & 0xff;
+}
+
+int main(void) {
+    setup();    // set up the physical hardware
+    //int delay = 1000;   // 1000 -> 500 -> 250 -> 125 -> 62 -> 50
+    int timer_delay = 15625; //(0x061d) gives 1s 
+    int posn = 0b0000000000001000;  // posn holds the LED that is turned on
+    write_LEDs(posn);
+    while (1) {
+      //delay_ms(delay);
+      timer_delay_ms(timer_delay);
+        if ((PIND & 0b00000100) == 0) {
+            // button is pressed - check which LED is lit.
+            
+            if (posn == 0b0000000010000000) { // middle green LED
+                //delay >>= 1; // make it faster
+                //if (delay < 50) {
+                    //delay = 50;    // fastest it can go.
+                //}
+              timer_delay >>= 1;
+              if(timer_delay < 781)
+                timer_delay = 781;
+                // green buzz
+            } else if ((posn & 0b0000000101000000) == 0) {
+                // not one of the orange LEDs, and not the green LED, so it
+                // must be a RED LED.
+                //delay = 1000;
+              timer_delay = 15625;
+                // red buzz
+            }
+            while ((PIND & 0b00000100) == 0) {
+                ;
+            }
+        }
+        posn <<= 1;
+        if (posn == 0b0000001000000000) {
+            posn <<= 1; // skip the output bit for the buzzer
+        }
+        if (posn == 0b0010000000000000) {
+            posn = 0b0000000000001000;  // back to starting posn
+        }
+        write_LEDs(posn);   // update LEDs
+    }
+}
