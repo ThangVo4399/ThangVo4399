@@ -1,0 +1,69 @@
+*
+ * File:   boppit.c
+ * Author: Thang Vo Hoang
+
+ * This plays the boppit game. We are using the supplied schematic (boppit)
+ * There is one input button (port D pin 2, which goes LOW when pressed)
+ * There are 9 LEDs port D pins 3-7, port C pins 0,2-4
+ */
+
+
+#include <xc.h>
+
+void delay_ms(long num) {
+    while (num--) {
+        for (volatile long x = 0; x < 468; x++) {
+            ;
+        }
+    }
+}
+
+void setup() {
+    DDRD = 0b11111000;  // pins 0-2 input, pins 3-7 output
+    DDRB = 0b00111111;  // pins 0-5 outputs (Pin 5 inbuilt LED for debug)
+    
+    PORTD = 0b00000111; // turn on pullup resistors for all inputs
+    PORTB = 0b11000000;
+}
+
+void write_LEDs(int leds) {
+    PORTD = (leds & 0xf8) | 4;  // keep pullup resistor on
+    PORTB = (leds >> 8) & 0xff;
+}
+
+int main(void) {
+    setup();    // set up the physical hardware
+    int delay = 1000;   // 1000 -> 500 -> 250 -> 125 -> 62 -> 50
+    int posn = 0b0000000000001000;  // posn holds the LED that is turned on
+    write_LEDs(posn);
+    while (1) {
+        delay_ms(delay);
+        if ((PIND & 0b00000100) == 0) {
+            // button is pressed - check which LED is lit.
+            
+            if (posn == 0b0000000010000000) { // middle green LED
+                delay >>= 1; // make it faster
+                if (delay < 50) {
+                    delay = 50;    // fastest it can go.
+                }
+                // green buzz
+            } else if ((posn & 0b0000000101000000) == 0) {
+                // not one of the orange LEDs, and not the green LED, so it
+                // must be a RED LED.
+                delay = 1000;
+                // red buzz
+            }
+            while ((PIND & 0b00000100) == 0) {
+                ;
+            }
+        }
+        posn <<= 1;
+        if (posn == 0b0000001000000000) {
+            posn <<= 1; // skip the output bit for the buzzer
+        }
+        if (posn == 0b0010000000000000) {
+            posn = 0b0000000000001000;  // back to starting posn
+        }
+        write_LEDs(posn);   // update LEDs
+    }
+}
